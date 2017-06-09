@@ -4,6 +4,7 @@
   "description": "NodeJS Asterisk API",
   "main": "server.js",
   "dependencies": {
+    "asterisk-config": "^0.2.1",
     "asterisk-manager": "^0.1.15",
     "express": "^4.15.3",
     "ini": "^1.3.4",

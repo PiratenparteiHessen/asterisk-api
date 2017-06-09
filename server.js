@@ -4,7 +4,9 @@ var fs = require('fs'),
     config = ini.parse(fs.readFileSync('./config.ini', 'utf-8')),
     express = require('express'),
     app = express(),
-    port = process.env.PORT || config.server.port;
+    port = process.env.PORT || config.server.port,
+    rooms = [],
+    rooms_priv = [];
 
 
 /**
@@ -14,11 +16,41 @@ var fs = require('fs'),
  * password: username's password for authentication
  * events: this parameter determines whether events are emited.
  **/
-var ami = new require('asterisk-manager')(config.asterisk.port, config.asterisk.host, config.asterisk.username, config.asterisk.password, true); 
+var ami = new require('asterisk-manager')(config.asterisk.port, config.asterisk.host, config.asterisk.username, config.asterisk.password, true),
+    ac = require('asterisk-config');
  
 // In case of any connectiviy problems we got you coverd. 
 ami.keepConnected();
 
+// meetme config
+var cb = function(err, obj) {
+	if (err) {
+		console.log(err);
+	} else if (obj) {
+		//console.log(obj);
+		//console.log(obj.rooms);
+		//console.log(typeof obj.rooms.vars.conf);
+
+		Object.keys(obj.rooms.vars.conf).forEach(function(key) {
+			var room = obj.rooms.vars.conf[key];	
+			//console.log(key+" / "+room);
+			var room_info = room.split(",");
+			//console.log(room_info);
+			if (room_info[1] == '0') {
+				rooms.push(room_info[0]);
+			} else {
+				rooms_priv.push(room_info[0]);
+			}
+		});
+		console.log("rooms", rooms);
+		console.log("rooms_priv", rooms_priv);
+	}
+};
+
+ac.getConfigLocal('/etc/asterisk/meetme.conf', cb, {
+	varsAsArray: false, 
+	duphandlers: {'conf': 'array'}
+});
 
 // express
 app.use(function(req, res, next) {
@@ -36,6 +68,22 @@ app.get('/meetmelist/:room', function(req, res) {
 	//console.log("res", res);
 	var room = req.params.room;
 	console.log("/meetmelist/"+room);
+
+	if (rooms_priv.contains(room)) {
+		res.json({
+			success: false,
+			message: 'none public room'
+		});
+		return;
+	}
+
+	if (!rooms.contains(room)) {
+		res.json({
+			success: false,
+			message: 'invalid room'
+		});
+		return;
+	}
 
 	var uuid = uuidV4();
 
@@ -69,9 +117,14 @@ var queryMeetme = function(uuid, res, evt) {
 		ami.removeListener('managerevent', queryMeetme);
                         
 		var ret = {
+			success: true,
 			listitems: evt.listitems
 		};
 
 		res.json(ret);
 	}
+};
+
+Array.prototype.contains = function(element){
+	return this.indexOf(element) > -1;
 };
